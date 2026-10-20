@@ -2,7 +2,7 @@ name: Timelm ARM64 baseline
 on:
   workflow_dispatch:
   push:
-    branches: ['codex/timelm-clean-install']
+    branches: ['timelm-clean-install']
   pull_request:
 permissions:
   contents: read
