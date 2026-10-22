@@ -88,9 +88,9 @@ ButtonsEvtIoDeviceControl(
     TraceEvents(TRACE_LEVEL_INFORMATION,
                 TRACE_QUEUE,
                 "%!FUNC! ioctl 0x%08x in %u out %u",
-                IoControlCode,
-                (UINT)InputBufferLength,
-                (UINT)OutputBufferLength);
+                (unsigned int)IoControlCode,
+                (unsigned int)InputBufferLength,
+                (unsigned int)OutputBufferLength);
 
     switch (IoControlCode) {
 
@@ -110,13 +110,13 @@ ButtonsEvtIoDeviceControl(
             break;
         }
 
-        WdfSpinLockAcquire(&deviceContext->Lock);
+        KeAcquireSpinLock(&deviceContext->Lock);
         RtlCopyMemory(buffer, &deviceContext->State, sizeof(TIMELM_BUTTON_STATE));
-        WdfSpinLockRelease(&deviceContext->Lock);
+        KeReleaseSpinLock(&deviceContext->Lock);
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
-                                           sizeof(TIMELM_BUTTON_STATE));
+                                           (ULONG)sizeof(TIMELM_BUTTON_STATE));
         return;
     }
 
@@ -136,13 +136,13 @@ ButtonsEvtIoDeviceControl(
             break;
         }
 
-        WdfSpinLockAcquire(&deviceContext->Lock);
+        KeAcquireSpinLock(&deviceContext->Lock);
         RtlCopyMemory(buffer, &deviceContext->Mapping, sizeof(TIMELM_BUTTON_MAPPING));
-        WdfSpinLockRelease(&deviceContext->Lock);
+        KeReleaseSpinLock(&deviceContext->Lock);
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
-                                           sizeof(TIMELM_BUTTON_MAPPING));
+                                           (ULONG)sizeof(TIMELM_BUTTON_MAPPING));
         return;
     }
 
@@ -175,11 +175,11 @@ ButtonsEvtIoDeviceControl(
             break;
         }
 
-        WdfSpinLockAcquire(&deviceContext->Lock);
+        KeAcquireSpinLock(&deviceContext->Lock);
         deviceContext->Mapping = mapping;
         RtlZeroMemory(deviceContext->Entries, sizeof(deviceContext->Entries));
         deviceContext->State.Buttons = 0;
-        WdfSpinLockRelease(&deviceContext->Lock);
+        KeReleaseSpinLock(&deviceContext->Lock);
 
         TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_QUEUE, "Mapping updated");
 
@@ -242,7 +242,7 @@ ButtonsEvtIoDeviceControl(
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
-                                           sizeof(TIMELM_BUTTON_RAW_REQUEST) + rawRequest.Length);
+                                           (ULONG)(sizeof(TIMELM_BUTTON_RAW_REQUEST) + rawRequest.Length));
         return;
     }
 
@@ -274,11 +274,18 @@ ButtonsEvtIoDeviceControl(
 
         if (timeout > 0) {
             NTSTATUS waitStatus;
+            LARGE_INTEGER timeoutValue;
+
+            //
+            // The timeout is relative and expressed in 100 ns units.
+            //
+            timeoutValue.QuadPart = -((LONGLONG)timeout * 10000);
 
             waitStatus = KeWaitForSingleObject(&deviceContext->ChangeEvent,
-                                               &timeout,
-                                               KernelWaitMode,
-                                               FALSE);
+                                               ExecutiveWaitMode,
+                                               KernelMode,
+                                               FALSE,
+                                               &timeoutValue);
             if (waitStatus == STATUS_TIMEOUT) {
                 /* Not an error, the caller gets the current state. */
             } else if (!NT_SUCCESS(waitStatus)) {
@@ -300,13 +307,13 @@ ButtonsEvtIoDeviceControl(
             break;
         }
 
-        WdfSpinLockAcquire(&deviceContext->Lock);
+        KeAcquireSpinLock(&deviceContext->Lock);
         RtlCopyMemory(buffer, &deviceContext->State, sizeof(TIMELM_BUTTON_STATE));
-        WdfSpinLockRelease(&deviceContext->Lock);
+        KeReleaseSpinLock(&deviceContext->Lock);
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
-                                           sizeof(TIMELM_BUTTON_STATE));
+                                           (ULONG)sizeof(TIMELM_BUTTON_STATE));
         return;
     }
 

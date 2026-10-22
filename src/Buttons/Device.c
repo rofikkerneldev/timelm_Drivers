@@ -47,6 +47,8 @@ ButtonsCreateDevice(
     WDFDEVICE device;
     WDF_TIMER_CONFIG timerConfig;
     WDF_OBJECT_ATTRIBUTES timerAttributes;
+    WDF_WORKITEM_CONFIG workItemConfig;
+    WDF_OBJECT_ATTRIBUTES workItemAttributes;
     NTSTATUS status;
 
     PAGED_CODE();
@@ -63,7 +65,7 @@ ButtonsCreateDevice(
     RtlZeroMemory(deviceContext, sizeof(DEVICE_CONTEXT));
 
     deviceContext->Device = device;
-    WdfSpinLockInitialize(&deviceContext->Lock);
+    KeInitializeSpinLock(&deviceContext->Lock);
     KeInitializeEvent(&deviceContext->ChangeEvent, NotificationEvent, FALSE);
 
     ButtonsLoadDefaultMapping(&deviceContext->Mapping);
@@ -121,9 +123,10 @@ ButtonsCreateDevice(
     }
 
     //
-    // The timer is used as a one shot timer that re-arms itself, a passive
-    // level device object must not use a periodic timer.  The callback runs
-    // at PASSIVE_LEVEL, which is what the PMIC access needs.
+    // The timer runs as a DPC at DISPATCH_LEVEL, it only re-arms itself and
+    // hands the sampling over to a work item, so that the PMIC is always
+    // accessed at PASSIVE_LEVEL.  The automatic serialization is disabled for
+    // both objects, otherwise a blocked WAIT ioctl would stop the sampler.
     //
     WDF_TIMER_CONFIG_INIT(&timerConfig, ButtonsEvtTimerFired);
     timerConfig.AutomaticSerialization = FALSE;
@@ -136,6 +139,20 @@ ButtonsCreateDevice(
                             &deviceContext->Timer);
     if (!NT_SUCCESS(status)) {
         TraceEvents(TRACE_LEVEL_ERROR, TRACE_DEVICE, "WdfTimerCreate failed %!STATUS!", status);
+        return status;
+    }
+
+    WDF_WORKITEM_CONFIG_INIT(&workItemConfig, ButtonsEvtWorkItem);
+    workItemConfig.AutomaticSerialization = FALSE;
+
+    WDF_OBJECT_ATTRIBUTES_INIT(&workItemAttributes);
+    workItemAttributes.ParentObject = device;
+
+    status = WdfWorkItemCreate(&workItemConfig,
+                               &workItemAttributes,
+                               &deviceContext->WorkItem);
+    if (!NT_SUCCESS(status)) {
+        TraceEvents(TRACE_LEVEL_ERROR, TRACE_DEVICE, "WdfWorkItemCreate failed %!STATUS!", status);
         return status;
     }
 
@@ -339,12 +356,27 @@ ButtonsEvtTimerFired(
     device = (WDFDEVICE)WdfTimerGetParentObject(Timer);
     deviceContext = DeviceGetContext(device);
 
-    ButtonsSample(deviceContext);
-
     //
-    // Re-arm the one shot timer for the next sample.
+    // Re-arm the one shot timer for the next sample and let the work item do
+    // the PMIC access at PASSIVE_LEVEL.
     //
     WdfTimerStart(Timer, TIMELM_BUTTONS_REL_TIMEOUT_MS(TIMELM_BUTTONS_POLL_PERIOD_MS));
+
+    WdfWorkItemEnqueue(deviceContext->WorkItem);
+}
+
+VOID
+ButtonsEvtWorkItem(
+    _In_ WDFWORKITEM WorkItem
+    )
+{
+    WDFDEVICE device;
+    PDEVICE_CONTEXT deviceContext;
+
+    device = (WDFDEVICE)WdfWorkItemGetParentObject(WorkItem);
+    deviceContext = DeviceGetContext(device);
+
+    ButtonsSample(deviceContext);
 }
 
 VOID
@@ -383,9 +415,9 @@ ButtonsSample(
     RtlZeroMemory(sampleValid, sizeof(sampleValid));
     RtlZeroMemory(cacheValid, sizeof(cacheValid));
 
-    WdfSpinLockAcquire(&Context->Lock);
+    KeAcquireSpinLock(&Context->Lock);
     mapping = Context->Mapping;
-    WdfSpinLockRelease(&Context->Lock);
+    KeReleaseSpinLock(&Context->Lock);
 
     now = (ULONG)ButtonsNowMs(Context);
 
@@ -442,7 +474,7 @@ ButtonsSample(
         sampleValid[i] = TRUE;
     }
 
-    WdfSpinLockAcquire(&Context->Lock);
+    KeAcquireSpinLock(&Context->Lock);
 
     for (i = 0; i < TIMELM_BUTTON_COUNT; i++) {
         PBUTTON_ENTRY entry;
@@ -495,9 +527,9 @@ ButtonsSample(
 
     Context->State.Ready = Context->SpmiReady ? 1 : 0;
 
-    WdfSpinLockRelease(&Context->Lock);
+    KeReleaseSpinLock(&Context->Lock);
 
     if (changed) {
-        KeSetEvent(&Context->ChangeEvent);
+        KeSetEvent(&Context->ChangeEvent, IO_NO_INCREMENT, FALSE);
     }
 }

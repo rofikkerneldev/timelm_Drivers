@@ -79,10 +79,11 @@ typedef struct _BUTTON_ENTRY {
 typedef struct _DEVICE_CONTEXT {
     WDFDEVICE Device;
     WDFTIMER Timer;
+    WDFWORKITEM WorkItem;
     WDFIOTARGET IoTarget;
     SPMI_INTERFACE SPMIInterface;
     BOOLEAN SpmiReady;
-    WDFSPINLOCK Lock;
+    KSPIN_LOCK Lock;
     TIMELM_BUTTON_MAPPING Mapping;
     TIMELM_BUTTON_STATE State;
     BUTTON_ENTRY Entries[TIMELM_BUTTON_COUNT];
@@ -123,6 +124,8 @@ ButtonsSample(
     );
 
 EVT_WDF_TIMER ButtonsEvtTimerFired;
+
+EVT_WDF_WORKITEM ButtonsEvtWorkItem;
 
 ULONG64
 ButtonsNowMs(
