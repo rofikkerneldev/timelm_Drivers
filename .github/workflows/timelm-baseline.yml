@@ -1,0 +1,54 @@
+name: Timelm ARM64 baseline
+on:
+  workflow_dispatch:
+  push:
+    branches: ['timelm-clean-install']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  drivers:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+      - name: Build GPIO, SPMI, PMIC and Buttons
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force packages | Out-Null
+          $solution = "$pwd\build\"
+          $parts = @(
+            @{ dir = 'GPIO';    project = 'GPIO' },
+            @{ dir = 'SPMI';    project = 'SPMI' },
+            @{ dir = 'PMIC';    project = 'PMIC' },
+            @{ dir = 'Buttons'; project = 'TimelmButtons' }
+          )
+          foreach ($part in $parts) {
+            & msbuild "src\$($part.dir)\$($part.project).vcxproj" /m /t:Rebuild /nologo /v:minimal /p:Configuration=Debug /p:Platform=ARM64 "/p:SolutionDir=$solution" /p:KmdfLibraryVersion=1.33 /p:PreferredToolArchitecture=x64 "/flp:logfile=packages\$($part.dir)-build.log;verbosity=normal"
+            if ($LASTEXITCODE -ne 0) { throw "$($part.dir) build failed: $LASTEXITCODE" }
+            Copy-Item -Recurse "build\ARM64\Debug\Output\$($part.project)" "packages\$($part.dir)"
+          }
+          $manifest = foreach ($file in Get-ChildItem packages -Recurse -File) {
+            if ($file.Extension -eq '.sys') {
+              $b = [IO.File]::ReadAllBytes($file.FullName)
+              $pe = [BitConverter]::ToInt32($b,60)
+              if ([BitConverter]::ToUInt16($b,$pe+4) -ne 0xAA64) { throw 'Non-ARM64 driver' }
+              $sig = Get-AuthenticodeSignature $file.FullName
+              if (!$sig.SignerCertificate) { throw "Missing test signature: $($file.Name)" }
+              [IO.File]::WriteAllBytes(($file.DirectoryName+'\testsigner.cer'),$sig.SignerCertificate.Export('Cert'))
+            }
+            @{path=[IO.Path]::GetRelativePath("$pwd\packages",$file.FullName);sha256=(Get-FileHash $file.FullName).Hash;size=$file.Length}
+          }
+          $manifest | ConvertTo-Json | Set-Content packages\sha256.json
+          @{repository='https://github.com/rofikkerneldev/timelm_Drivers';commit=$env:GITHUB_SHA;components=@('GPIO','SPMI','PMIC','Buttons');board='LG V60 timelm';configuration='Debug';architecture='ARM64';kmdf='1.33';experimentalTouchPower=$false} | ConvertTo-Json | Set-Content packages\source.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: timelm-baseline-ARM64
+          path: packages/
+          if-no-files-found: error
+          retention-days: 30

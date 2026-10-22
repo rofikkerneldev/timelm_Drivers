@@ -1,0 +1,66 @@
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System
+ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider    = %ProviderName%
+CatalogFile = TimelmButtons.cat
+DriverVer   =
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+TimelmButtons.sys  = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NTARM64.10.0...16299
+
+; The PMIC node of the runtime DSDT (ACPI\KONA1003) is reused, no firmware
+; or SSDT change is needed.  Only one driver may own that hardware id, the
+; old PMIC.inf has to be removed before this package is installed.
+[Standard.NTARM64.10.0...16299]
+%TIMELM.DeviceDesc% = TimelmButtons_Device, ACPI\KONA1003
+
+[TimelmButtons_Device.NT]
+CopyFiles = File_Copy
+
+[File_Copy]
+TimelmButtons.sys
+
+;-------------- Lower filter of the virtual HID device
+; The HID face of the driver creates a virtual HID device with the Virtual
+; HID Framework.  The vhf filter has to be part of the stack of this
+; device, otherwise VhfCreate fails.
+[TimelmButtons_Device.NT.HW]
+AddReg = TimelmButtons_LowerFilters
+
+[TimelmButtons_LowerFilters]
+HKR,,"LowerFilters",0x00010008,"vhf"
+
+;-------------- Service installation
+[TimelmButtons_Device.NT.Services]
+AddService = TimelmButtons,%SPSVCINST_ASSOCSERVICE%, TimelmButtons_Service_Inst
+
+; -------------- TimelmButtons driver install sections
+[TimelmButtons_Service_Inst]
+DisplayName    = %TIMELM.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\TimelmButtons.sys
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ProviderName = "WoA-Kona authors"
+ManufacturerName = "Qualcomm"
+DiskName = "Qualcomm PMIC Device Installation Disk"
+TIMELM.DeviceDesc = "Timelm Volume and Power Buttons"
+TIMELM.SVCDESC = "Timelm Buttons Service"

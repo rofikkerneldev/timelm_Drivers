@@ -15,7 +15,9 @@ env:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # windows-2022 is used because the WDK that provides ntddk.h is part of
+    # that image, the windows-latest image does not ship the WDK.
+    runs-on: windows-2022
     strategy:
       matrix:
         PLATFORM: [ARM64]

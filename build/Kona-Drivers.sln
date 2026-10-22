@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SPMI", "..\src\SPMI\SPMI.vc
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PMIC", "..\src\PMIC\PMIC.vcxproj", "{EA053061-242B-4109-B772-712E92205B5F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Buttons", "..\src\Buttons\TimelmButtons.vcxproj", "{7C4E9D3B-2A58-4F61-B0D7-8E5C1A9F3D26}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM64 = Debug|ARM64
@@ -39,6 +41,12 @@ Global
 		{EA053061-242B-4109-B772-712E92205B5F}.Release|ARM64.ActiveCfg = Release|ARM64
 		{EA053061-242B-4109-B772-712E92205B5F}.Release|ARM64.Build.0 = Release|ARM64
 		{EA053061-242B-4109-B772-712E92205B5F}.Release|ARM64.Deploy.0 = Release|ARM64
+		{7C4E9D3B-2A58-4F61-B0D7-8E5C1A9F3D26}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{7C4E9D3B-2A58-4F61-B0D7-8E5C1A9F3D26}.Debug|ARM64.Build.0 = Debug|ARM64
+		{7C4E9D3B-2A58-4F61-B0D7-8E5C1A9F3D26}.Debug|ARM64.Deploy.0 = Debug|ARM64
+		{7C4E9D3B-2A58-4F61-B0D7-8E5C1A9F3D26}.Release|ARM64.ActiveCfg = Release|ARM64
+		{7C4E9D3B-2A58-4F61-B0D7-8E5C1A9F3D26}.Release|ARM64.Build.0 = Release|ARM64
+		{7C4E9D3B-2A58-4F61-B0D7-8E5C1A9F3D26}.Release|ARM64.Deploy.0 = Release|ARM64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
