@@ -46,6 +46,7 @@ ButtonsCreateDevice(
     PDEVICE_CONTEXT deviceContext;
     WDFDEVICE device;
     WDF_TIMER_CONFIG timerConfig;
+    WDF_OBJECT_ATTRIBUTES timerAttributes;
     NTSTATUS status;
 
     PAGED_CODE();
@@ -119,18 +120,27 @@ ButtonsCreateDevice(
                     status);
     }
 
+    //
+    // The timer is used as a one shot timer that re-arms itself, a passive
+    // level device object must not use a periodic timer.  The callback runs
+    // at PASSIVE_LEVEL, which is what the PMIC access needs.
+    //
     WDF_TIMER_CONFIG_INIT(&timerConfig, ButtonsEvtTimerFired);
+    timerConfig.AutomaticSerialization = FALSE;
 
-    status = WdfTimerCreate(device,
-                            &timerConfig,
-                            WDF_NO_OBJECT_ATTRIBUTES,
+    WDF_OBJECT_ATTRIBUTES_INIT(&timerAttributes);
+    timerAttributes.ParentObject = device;
+
+    status = WdfTimerCreate(&timerConfig,
+                            &timerAttributes,
                             &deviceContext->Timer);
     if (!NT_SUCCESS(status)) {
         TraceEvents(TRACE_LEVEL_ERROR, TRACE_DEVICE, "WdfTimerCreate failed %!STATUS!", status);
         return status;
     }
 
-    WdfTimerStart(deviceContext->Timer, TIMELM_BUTTONS_POLL_PERIOD_MS, 0);
+    WdfTimerStart(deviceContext->Timer,
+                  TIMELM_BUTTONS_REL_TIMEOUT_MS(TIMELM_BUTTONS_POLL_PERIOD_MS));
 
     TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DEVICE,
                 "%!FUNC! TimelmButtons started, poll %d ms",
@@ -210,9 +220,9 @@ ButtonsAcquireSpmi(
         if (NT_SUCCESS(ButtonsReadPmic(deviceContext, TIMELM_PMIC_SID_PRIMARY, 0x0004, pmicInfo, 2))) {
             TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DEVICE,
                         "PMIC sid %d type 0x%02x subtype 0x%02x",
-                        TIMELM_PMIC_SID_PRIMARY,
-                        pmicInfo[0],
-                        pmicInfo[1]);
+                        (int)TIMELM_PMIC_SID_PRIMARY,
+                        (unsigned int)pmicInfo[0],
+                        (unsigned int)pmicInfo[1]);
         }
     }
 
@@ -330,6 +340,11 @@ ButtonsEvtTimerFired(
     deviceContext = DeviceGetContext(device);
 
     ButtonsSample(deviceContext);
+
+    //
+    // Re-arm the one shot timer for the next sample.
+    //
+    WdfTimerStart(Timer, TIMELM_BUTTONS_REL_TIMEOUT_MS(TIMELM_BUTTONS_POLL_PERIOD_MS));
 }
 
 VOID

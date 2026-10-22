@@ -77,7 +77,7 @@ typedef struct _TIMELM_BUTTON_SOURCE {
     UINT32 Polarity;  /* TIMELM_POLARITY_HIGH / _LOW            */
     UINT32 Enabled;   /* 0 = skip this source                    */
     UINT32 Reserved;
-} TIMELM_BUTTON_SOURCE;
+} TIMELM_BUTTON_SOURCE, *PTIMELM_BUTTON_SOURCE;
 
 //
 // Complete mapping of the three buttons.
@@ -86,7 +86,7 @@ typedef struct _TIMELM_BUTTON_MAPPING {
     UINT32 Version;   /* TIMELM_BUTTON_MAPPING_VERSION */
     UINT32 Count;     /* number of valid Source[] entries */
     TIMELM_BUTTON_SOURCE Source[TIMELM_BUTTON_COUNT];
-} TIMELM_BUTTON_MAPPING;
+} TIMELM_BUTTON_MAPPING, *PTIMELM_BUTTON_MAPPING;
 
 //
 // Runtime state of the buttons.
@@ -100,7 +100,7 @@ typedef struct _TIMELM_BUTTON_STATE {
     UINT32 HeldMillis[TIMELM_BUTTON_COUNT]; /* duration of the current (or last) press */
     UINT32 LastEdgeMillis;  /* milliseconds since the driver was loaded */
     UINT32 Reserved;
-} TIMELM_BUTTON_STATE;
+} TIMELM_BUTTON_STATE, *PTIMELM_BUTTON_STATE;
 
 //
 // Input of IOCTL_TIMELM_BUTTONS_RAW_READ / IOCTL_TIMELM_BUTTONS_DUMP.
@@ -111,7 +111,7 @@ typedef struct _TIMELM_BUTTON_RAW_REQUEST {
     UINT32 Addr;
     UINT32 Length;   /* 1 .. TIMELM_BUTTONS_MAX_TRANSFER */
     UINT32 Reserved;
-} TIMELM_BUTTON_RAW_REQUEST;
+} TIMELM_BUTTON_RAW_REQUEST, *PTIMELM_BUTTON_RAW_REQUEST;
 
 //
 // Input of IOCTL_TIMELM_BUTTONS_WAIT, output is a TIMELM_BUTTON_STATE.
@@ -119,4 +119,4 @@ typedef struct _TIMELM_BUTTON_RAW_REQUEST {
 typedef struct _TIMELM_BUTTON_WAIT_REQUEST {
     UINT32 TimeoutMillis; /* 0 .. 5000 */
     UINT32 Reserved;
-} TIMELM_BUTTON_WAIT_REQUEST;
+} TIMELM_BUTTON_WAIT_REQUEST, *PTIMELM_BUTTON_WAIT_REQUEST;

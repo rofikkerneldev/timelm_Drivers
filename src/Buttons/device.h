@@ -59,6 +59,11 @@ EXTERN_C_START
 #define TIMELM_BUTTONS_SYMBOLIC_LINK    L"\\DosDevices\\TimelmButtons"
 
 //
+// Relative timeout in 100 ns units, the unit that WdfTimerStart expects.
+//
+#define TIMELM_BUTTONS_REL_TIMEOUT_MS(_ms) (-((LONGLONG)(_ms) * 10000))
+
+//
 // Per button debounce / edge tracking.
 //
 typedef struct _BUTTON_ENTRY {
