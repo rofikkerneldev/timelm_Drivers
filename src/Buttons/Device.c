@@ -27,6 +27,7 @@ Abstract:
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, ButtonsCreateDevice)
+#pragma alloc_text (PAGE, ButtonsEvtDeviceD0Entry)
 #endif
 
 #define TIMELM_SPMI_RETRY_TICKS 25   /* ~500 ms with a 20 ms poll period */
@@ -55,14 +56,17 @@ ButtonsCreateDevice(
     PAGED_CODE();
 
     //
-    // The virtual HID device has to be deleted when the device is removed,
-    // otherwise the driver unload would leave it behind.
+    // The virtual HID device is created when the device is powered on and
+    // deleted when it is powered off, so that it exists exactly as long as
+    // the driver needs it.
     //
     {
-        WDF_DEVICE_REMOVE_CONFIG removeConfig;
+        WDF_PNPPOWER_EVENT_CALLBACKS pnpPower;
 
-        WDF_DEVICE_REMOVE_CONFIG_INIT(&removeConfig, ButtonsEvtDeviceRemove);
-        WdfDeviceInitSetDeviceRemoveConfig(DeviceInit, &removeConfig);
+        WDF_PNPPOWER_EVENT_CALLBACKS_INIT(&pnpPower);
+        pnpPower.EvtDeviceD0Entry = ButtonsEvtDeviceD0Entry;
+        pnpPower.EvtDeviceD0Exit = ButtonsEvtDeviceD0Exit;
+        WdfDeviceInitSetPnpPowerEventCallbacks(DeviceInit, &pnpPower);
     }
 
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&deviceAttributes, DEVICE_CONTEXT);
@@ -98,22 +102,6 @@ ButtonsCreateDevice(
     deviceContext->State.ChangeCounter = 0;
     deviceContext->State.HidReady = 0;
     deviceContext->State.HidReportCount = 0;
-
-    //
-    // The HID face is optional.  When it is there, Windows sees the buttons
-    // as a real HID device and reacts to them itself.  A failure of the VHF
-    // device is only a warning, the agent path does not need it and the
-    // driver keeps working.
-    //
-    status = ButtonsHidInitialize(deviceContext);
-    if (NT_SUCCESS(status)) {
-        (void)ButtonsHidStart(deviceContext);
-    } else {
-        TraceEvents(TRACE_LEVEL_WARNING, TRACE_DEVICE,
-                    "the HID face is not available (%!STATUS!), the agent path stays usable",
-                    status);
-    }
-    deviceContext->State.HidReady = deviceContext->HidStarted ? 1 : 0;
 
     //
     // The symbolic link is the user mode entry point: \\.\TimelmButtons
@@ -207,16 +195,66 @@ ButtonsCreateDevice(
 }
 
 //
-// Called when the device is removed from the system, for example when the
-// driver package is uninstalled.  The virtual HID device has to be deleted
-// here, otherwise the driver unload would leave it behind.
+// The device is powered on.  The virtual HID device is created here, so
+// that it exists exactly as long as the driver is powered.  The HID face is
+// optional, a failure is only a warning, the agent path does not need it
+// and the driver keeps working.
 //
-VOID
-ButtonsEvtDeviceRemove(
-    _In_ WDFDEVICE Device
+NTSTATUS
+ButtonsEvtDeviceD0Entry(
+    _In_ WDFDEVICE Device,
+    _In_ WDF_POWER_DEVICE_STATE PreviousState
     )
 {
     PDEVICE_CONTEXT deviceContext;
+    NTSTATUS status;
+
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(PreviousState);
+
+    deviceContext = DeviceGetContext(Device);
+
+    WdfSpinLockAcquire(deviceContext->Lock);
+    deviceContext->HidStopping = FALSE;
+    WdfSpinLockRelease(deviceContext->Lock);
+
+    status = ButtonsHidInitialize(deviceContext);
+    if (!NT_SUCCESS(status)) {
+        TraceEvents(TRACE_LEVEL_WARNING, TRACE_DEVICE,
+                    "the HID face is not available (%!STATUS!), the agent path stays usable",
+                    status);
+        return STATUS_SUCCESS;
+    }
+
+    status = ButtonsHidStart(deviceContext);
+    if (!NT_SUCCESS(status)) {
+        TraceEvents(TRACE_LEVEL_WARNING, TRACE_DEVICE,
+                    "the HID device could not be started (%!STATUS!)",
+                    status);
+    }
+
+    WdfSpinLockAcquire(deviceContext->Lock);
+    deviceContext->State.HidReady = deviceContext->HidStarted ? 1 : 0;
+    WdfSpinLockRelease(deviceContext->Lock);
+
+    return STATUS_SUCCESS;
+}
+
+//
+// The device is powered off, it is removed from the system or the phone
+// goes to sleep.  The virtual HID device has to be deleted here, otherwise
+// the driver unload would leave it behind.
+//
+VOID
+ButtonsEvtDeviceD0Exit(
+    _In_ WDFDEVICE Device,
+    _In_ WDF_POWER_DEVICE_STATE TargetState
+    )
+{
+    PDEVICE_CONTEXT deviceContext;
+
+    UNREFERENCED_PARAMETER(TargetState);
 
     deviceContext = DeviceGetContext(Device);
 

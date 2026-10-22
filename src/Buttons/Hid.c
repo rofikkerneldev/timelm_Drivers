@@ -32,6 +32,7 @@ Abstract:
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, ButtonsHidInitialize)
 #pragma alloc_text (PAGE, ButtonsHidStart)
+#pragma alloc_text (PAGE, ButtonsHidStop)
 #endif
 
 //
