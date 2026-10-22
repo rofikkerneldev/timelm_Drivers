@@ -53,6 +53,16 @@ EXTERN_C_START
     (TIMELM_PMIC_GPIO_BASE + ((TIMELM_PMIC_GPIO_VOL_UP_INDEX - 1) * TIMELM_PMIC_GPIO_STRIDE) + TIMELM_PMIC_GPIO_MPP_RT_STS)
 
 //
+// The assist key of the phone.  It is the "hot1_key" node of the gpio_keys
+// device in the device tree, it uses gpio1 of the PMIC and is active low
+// (the flags of the device tree are 0x1, GPIO_ACTIVE_LOW).  The live device
+// tree gives the key the code 0x179.
+//
+#define TIMELM_PMIC_GPIO_ASSIST_INDEX 1
+#define TIMELM_PMIC_GPIO_ASSIST_ADDR \
+    (TIMELM_PMIC_GPIO_BASE + ((TIMELM_PMIC_GPIO_ASSIST_INDEX - 1) * TIMELM_PMIC_GPIO_STRIDE) + TIMELM_PMIC_GPIO_MPP_RT_STS)
+
+//
 // Sampling parameters.
 //
 #define TIMELM_BUTTONS_POLL_PERIOD_MS   20

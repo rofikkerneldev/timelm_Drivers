@@ -161,6 +161,7 @@ ButtonsEvtIoDeviceControl(
 
     case IOCTL_TIMELM_BUTTONS_SET_MAPPING: {
         TIMELM_BUTTON_MAPPING mapping;
+        TIMELM_BUTTON_MAPPING fallback;
         PVOID buffer = NULL;
         ULONG copyLength;
 
@@ -183,29 +184,36 @@ ButtonsEvtIoDeviceControl(
         RtlZeroMemory(&mapping, sizeof(mapping));
         RtlCopyMemory(&mapping, buffer, copyLength);
 
-        if (copyLength >= sizeof(TIMELM_BUTTON_MAPPING) &&
-            mapping.Version == TIMELM_BUTTON_MAPPING_VERSION &&
-            mapping.Count == TIMELM_BUTTON_COUNT) {
+        //
+        // The defaults fill the parts that a caller of an older version of
+        // the contract did not send.
+        //
+        RtlZeroMemory(&fallback, sizeof(fallback));
+        ButtonsLoadDefaultMapping(&fallback);
+
+        if (mapping.Version == TIMELM_BUTTON_MAPPING_VERSION &&
+            mapping.Count == TIMELM_BUTTON_COUNT &&
+            copyLength >= sizeof(TIMELM_BUTTON_MAPPING)) {
             //
             // The current version, the actions are used as they are.
             //
-        } else {
-            TIMELM_BUTTON_MAPPING fallback;
-
-            RtlZeroMemory(&fallback, sizeof(fallback));
-            ButtonsLoadDefaultMapping(&fallback);
-
-            if ((mapping.Version != 1u &&
-                 mapping.Version != TIMELM_BUTTON_MAPPING_VERSION) ||
-                mapping.Count != TIMELM_BUTTON_COUNT) {
-                TraceEvents(TRACE_LEVEL_ERROR, TRACE_QUEUE,
-                            "Invalid mapping version %u count %u",
-                            mapping.Version,
-                            mapping.Count);
-                status = STATUS_INVALID_PARAMETER;
-                break;
+        } else if (mapping.Version == 2u &&
+                   mapping.Count == TIMELM_BUTTON_LEGACY_COUNT) {
+            //
+            // The second version carries three sources and three actions.
+            // The fourth button is taken from the default mapping.
+            //
+            if (copyLength < TIMELM_BUTTON_MAPPING_V2_SIZE) {
+                RtlCopyMemory(mapping.Action,
+                              fallback.Action,
+                              sizeof(mapping.Action));
             }
-
+            mapping.SourceAssist = fallback.SourceAssist;
+            mapping.ActionAssist = fallback.ActionAssist;
+            mapping.Version = TIMELM_BUTTON_MAPPING_VERSION;
+            mapping.Count = TIMELM_BUTTON_COUNT;
+        } else if (mapping.Version == 1u &&
+                   mapping.Count == TIMELM_BUTTON_LEGACY_COUNT) {
             //
             // A tool that speaks the first version, or a caller that did
             // not send the actions at all.  The sources are taken over, the
@@ -214,7 +222,17 @@ ButtonsEvtIoDeviceControl(
             RtlCopyMemory(mapping.Action,
                           fallback.Action,
                           sizeof(mapping.Action));
+            mapping.SourceAssist = fallback.SourceAssist;
+            mapping.ActionAssist = fallback.ActionAssist;
             mapping.Version = TIMELM_BUTTON_MAPPING_VERSION;
+            mapping.Count = TIMELM_BUTTON_COUNT;
+        } else {
+            TraceEvents(TRACE_LEVEL_ERROR, TRACE_QUEUE,
+                        "Invalid mapping version %u count %u",
+                        mapping.Version,
+                        mapping.Count);
+            status = STATUS_INVALID_PARAMETER;
+            break;
         }
 
         WdfSpinLockAcquire(deviceContext->Lock);

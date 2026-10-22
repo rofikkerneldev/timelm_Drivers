@@ -15,6 +15,7 @@ Abstract:
       Power       -> 0x0810 bit0   (PON RT_STS, KPDPWR_N)  pressed = set
       Volume Down -> 0x0810 bit1   (PON RT_STS, RESIN_N)   pressed = set
       Volume Up   -> 0xC510 bit0   (PMIC GPIO6 MPP_RT_STS) pressed = clear
+      Assist      -> 0xC010 bit0   (PMIC GPIO1 MPP_RT_STS) pressed = clear
 
   The mapping can be replaced at run time with IOCTL
   IOCTL_TIMELM_BUTTONS_SET_MAPPING, which is used by the discovery tooling
@@ -397,7 +398,7 @@ ButtonsLoadDefaultMapping(
     //
     Mapping->Action[TIMELM_BUTTON_POWER].HidAction = TIMELM_HID_NONE;
     Mapping->Action[TIMELM_BUTTON_POWER].LongPressMillis = 1500;
-    Mapping->Action[TIMELM_BUTTON_POWER].AgentShortAction = TIMELM_AGENT_LOCK;
+    Mapping->Action[TIMELM_BUTTON_POWER].AgentShortAction = TIMELM_AGENT_LOCK_OR_WAKE;
     Mapping->Action[TIMELM_BUTTON_POWER].AgentLongAction = TIMELM_AGENT_SHUTDOWN;
     Mapping->Action[TIMELM_BUTTON_POWER].HidEnabled = 0;
 
@@ -412,6 +413,24 @@ ButtonsLoadDefaultMapping(
     Mapping->Action[TIMELM_BUTTON_VOLUME_DOWN].AgentShortAction = TIMELM_AGENT_ENTER;
     Mapping->Action[TIMELM_BUTTON_VOLUME_DOWN].AgentLongAction = TIMELM_AGENT_SHIFT_F10;
     Mapping->Action[TIMELM_BUTTON_VOLUME_DOWN].HidEnabled = 0;
+
+    //
+    // The assist key of the phone, PMIC gpio1, active low.  It has no
+    // counterpart in Windows, so it belongs to the agent.  The default
+    // starts the program of the target file of the agent, without that file
+    // the agent only writes a note into its log.
+    //
+    Mapping->SourceAssist.Sid = TIMELM_PMIC_SID_PRIMARY;
+    Mapping->SourceAssist.Addr = TIMELM_PMIC_GPIO_ASSIST_ADDR;
+    Mapping->SourceAssist.Mask = 0x01;
+    Mapping->SourceAssist.Polarity = TIMELM_POLARITY_LOW;
+    Mapping->SourceAssist.Enabled = 1;
+
+    Mapping->ActionAssist.HidAction = TIMELM_HID_NONE;
+    Mapping->ActionAssist.LongPressMillis = 0;
+    Mapping->ActionAssist.AgentShortAction = TIMELM_AGENT_LAUNCH_TARGET;
+    Mapping->ActionAssist.AgentLongAction = TIMELM_AGENT_NONE;
+    Mapping->ActionAssist.HidEnabled = 0;
 }
 
 NTSTATUS
@@ -556,15 +575,18 @@ ButtonsSample(
     for (i = 0; i < TIMELM_BUTTON_COUNT; i++) {
         UINT8 value = 0;
         BOOLEAN haveValue = FALSE;
+        PTIMELM_BUTTON_SOURCE source;
 
-        if (mapping.Source[i].Enabled == 0) {
+        source = TIMELM_MAPPING_SOURCE(&mapping, i);
+
+        if (source->Enabled == 0) {
             continue;
         }
 
         for (j = 0; j < TIMELM_BUTTON_COUNT; j++) {
             if (cacheValid[j] &&
-                cacheSid[j] == mapping.Source[i].Sid &&
-                cacheAddr[j] == mapping.Source[i].Addr) {
+                cacheSid[j] == source->Sid &&
+                cacheAddr[j] == source->Addr) {
                 value = cacheValue[j];
                 haveValue = TRUE;
                 break;
@@ -575,15 +597,15 @@ ButtonsSample(
             NTSTATUS status;
 
             status = ButtonsReadPmic(Context,
-                                     mapping.Source[i].Sid,
-                                     mapping.Source[i].Addr,
+                                     source->Sid,
+                                     source->Addr,
                                      &value,
                                      1);
             if (!NT_SUCCESS(status)) {
                 TraceEvents(TRACE_LEVEL_WARNING, TRACE_DEVICE,
                             "PMIC read sid %u addr 0x%x failed %!STATUS!",
-                            mapping.Source[i].Sid,
-                            mapping.Source[i].Addr,
+                            source->Sid,
+                            source->Addr,
                             status);
                 continue;
             }
@@ -591,16 +613,16 @@ ButtonsSample(
             for (j = 0; j < TIMELM_BUTTON_COUNT; j++) {
                 if (!cacheValid[j]) {
                     cacheValid[j] = TRUE;
-                    cacheSid[j] = mapping.Source[i].Sid;
-                    cacheAddr[j] = mapping.Source[i].Addr;
+                    cacheSid[j] = source->Sid;
+                    cacheAddr[j] = source->Addr;
                     cacheValue[j] = value;
                     break;
                 }
             }
         }
 
-        pressedNow[i] = ((value & (UINT8)mapping.Source[i].Mask) != 0) ? TRUE : FALSE;
-        if (mapping.Source[i].Polarity == TIMELM_POLARITY_LOW) {
+        pressedNow[i] = ((value & (UINT8)source->Mask) != 0) ? TRUE : FALSE;
+        if (source->Polarity == TIMELM_POLARITY_LOW) {
             pressedNow[i] = !pressedNow[i];
         }
         sampleValid[i] = TRUE;
@@ -645,13 +667,13 @@ ButtonsSample(
 
         if (entry->Stable) {
             Context->State.Buttons |= (1u << i);
-            Context->State.HeldMillis[i] = (UINT32)(now - entry->PressStartMs);
+            *TIMELM_STATE_HELD_MILLIS(&Context->State, i) = (UINT32)(now - entry->PressStartMs);
         } else {
             Context->State.Buttons &= ~(1u << i);
-            Context->State.HeldMillis[i] = (UINT32)entry->HeldMs;
+            *TIMELM_STATE_HELD_MILLIS(&Context->State, i) = (UINT32)entry->HeldMs;
         }
 
-        Context->State.PressCount[i] = entry->PressCount;
+        *TIMELM_STATE_PRESS_COUNT(&Context->State, i) = entry->PressCount;
     }
 
     if (changed) {
@@ -695,6 +717,7 @@ ButtonsHandleRelease(
     )
 {
     TIMELM_BUTTON_MAPPING mapping;
+    PTIMELM_BUTTON_ACTION action;
     UINT32 hidAction;
 
     WdfSpinLockAcquire(Context->Lock);
@@ -705,18 +728,20 @@ ButtonsHandleRelease(
         return;
     }
 
-    if (mapping.Action[Index].HidEnabled == 0) {
+    action = TIMELM_MAPPING_ACTION(&mapping, Index);
+
+    if (action->HidEnabled == 0) {
         return;
     }
 
-    hidAction = mapping.Action[Index].HidAction;
+    hidAction = action->HidAction;
 
     if (hidAction == TIMELM_HID_NONE) {
         return;
     }
 
-    if (mapping.Action[Index].LongPressMillis > 0 &&
-        HeldMillis >= mapping.Action[Index].LongPressMillis) {
+    if (action->LongPressMillis > 0 &&
+        HeldMillis >= action->LongPressMillis) {
         TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DEVICE,
                     "button %u was a long press (%u ms), no HID report",
                     (unsigned int)Index,
