@@ -43,6 +43,7 @@ ButtonsCreateDevice(
 {
     WDF_OBJECT_ATTRIBUTES deviceAttributes;
     WDF_OBJECT_ATTRIBUTES ioTargetAttributes;
+    WDF_OBJECT_ATTRIBUTES lockAttributes;
     PDEVICE_CONTEXT deviceContext;
     WDFDEVICE device;
     WDF_TIMER_CONFIG timerConfig;
@@ -65,7 +66,16 @@ ButtonsCreateDevice(
     RtlZeroMemory(deviceContext, sizeof(DEVICE_CONTEXT));
 
     deviceContext->Device = device;
-    KeInitializeSpinLock(&deviceContext->Lock);
+
+    WDF_OBJECT_ATTRIBUTES_INIT(&lockAttributes);
+    lockAttributes.ParentObject = device;
+
+    status = WdfSpinLockCreate(&lockAttributes, &deviceContext->Lock);
+    if (!NT_SUCCESS(status)) {
+        TraceEvents(TRACE_LEVEL_ERROR, TRACE_DEVICE, "WdfSpinLockCreate failed %!STATUS!", status);
+        return status;
+    }
+
     KeInitializeEvent(&deviceContext->ChangeEvent, NotificationEvent, FALSE);
 
     ButtonsLoadDefaultMapping(&deviceContext->Mapping);
@@ -415,9 +425,9 @@ ButtonsSample(
     RtlZeroMemory(sampleValid, sizeof(sampleValid));
     RtlZeroMemory(cacheValid, sizeof(cacheValid));
 
-    KeAcquireSpinLock(&Context->Lock);
+    WdfSpinLockAcquire(Context->Lock);
     mapping = Context->Mapping;
-    KeReleaseSpinLock(&Context->Lock);
+    WdfSpinLockRelease(Context->Lock);
 
     now = (ULONG)ButtonsNowMs(Context);
 
@@ -474,7 +484,7 @@ ButtonsSample(
         sampleValid[i] = TRUE;
     }
 
-    KeAcquireSpinLock(&Context->Lock);
+    WdfSpinLockAcquire(Context->Lock);
 
     for (i = 0; i < TIMELM_BUTTON_COUNT; i++) {
         PBUTTON_ENTRY entry;
@@ -527,7 +537,7 @@ ButtonsSample(
 
     Context->State.Ready = Context->SpmiReady ? 1 : 0;
 
-    KeReleaseSpinLock(&Context->Lock);
+    WdfSpinLockRelease(Context->Lock);
 
     if (changed) {
         KeSetEvent(&Context->ChangeEvent, IO_NO_INCREMENT, FALSE);

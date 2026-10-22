@@ -110,9 +110,9 @@ ButtonsEvtIoDeviceControl(
             break;
         }
 
-        KeAcquireSpinLock(&deviceContext->Lock);
+        WdfSpinLockAcquire(deviceContext->Lock);
         RtlCopyMemory(buffer, &deviceContext->State, sizeof(TIMELM_BUTTON_STATE));
-        KeReleaseSpinLock(&deviceContext->Lock);
+        WdfSpinLockRelease(deviceContext->Lock);
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
@@ -136,9 +136,9 @@ ButtonsEvtIoDeviceControl(
             break;
         }
 
-        KeAcquireSpinLock(&deviceContext->Lock);
+        WdfSpinLockAcquire(deviceContext->Lock);
         RtlCopyMemory(buffer, &deviceContext->Mapping, sizeof(TIMELM_BUTTON_MAPPING));
-        KeReleaseSpinLock(&deviceContext->Lock);
+        WdfSpinLockRelease(deviceContext->Lock);
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
@@ -175,11 +175,11 @@ ButtonsEvtIoDeviceControl(
             break;
         }
 
-        KeAcquireSpinLock(&deviceContext->Lock);
+        WdfSpinLockAcquire(deviceContext->Lock);
         deviceContext->Mapping = mapping;
         RtlZeroMemory(deviceContext->Entries, sizeof(deviceContext->Entries));
         deviceContext->State.Buttons = 0;
-        KeReleaseSpinLock(&deviceContext->Lock);
+        WdfSpinLockRelease(deviceContext->Lock);
 
         TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_QUEUE, "Mapping updated");
 
@@ -281,9 +281,14 @@ ButtonsEvtIoDeviceControl(
             //
             timeoutValue.QuadPart = -((LONGLONG)timeout * 10000);
 
+            //
+            // The wait reason is Executive and the processor mode is Kernel.
+            // Both values are passed numerically so that the driver does not
+            // depend on the spelling of the enum members.
+            //
             waitStatus = KeWaitForSingleObject(&deviceContext->ChangeEvent,
-                                               ExecutiveWaitMode,
-                                               KernelMode,
+                                               (KWAIT_REASON)0,
+                                               (KPROCESSOR_MODE)0,
                                                FALSE,
                                                &timeoutValue);
             if (waitStatus == STATUS_TIMEOUT) {
@@ -307,9 +312,9 @@ ButtonsEvtIoDeviceControl(
             break;
         }
 
-        KeAcquireSpinLock(&deviceContext->Lock);
+        WdfSpinLockAcquire(deviceContext->Lock);
         RtlCopyMemory(buffer, &deviceContext->State, sizeof(TIMELM_BUTTON_STATE));
-        KeReleaseSpinLock(&deviceContext->Lock);
+        WdfSpinLockRelease(deviceContext->Lock);
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
