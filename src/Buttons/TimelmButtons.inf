@@ -1,1 +1,56 @@
-孖敲獩潮崊卩杮慴畲攠†㴠∤坉乄佗匠乔␢੃污獳†††‽⁓祳瑥洊䍬慳獇畩搠†㴠笴搳㙥㤷搭攳㈵ⴱㅣ攭扦挱ⴰ㠰〲扥㄰㌱㡽੐牯癩摥爠†‽‥偲潶楤敲乡浥┊䍡瑡汯杆楬攠㴠呩浥汭䉵瑴潮献捡琊䑲楶敲噥爠†㴊偮灌潣此潷渠㴠ㄊਜ਼䑥獴楮慴楯湄楲獝੄敦慵汴䑥獴䑩爠㴠ㄳਊ孓潵牣敄楳歳乡浥獝਱‽‥䑩獫乡浥┬Ⱜ∢ਊ孓潵牣敄楳歳䙩汥獝੔業敬浂畴瑯湳⹳祳†㴠ㄬⰊ਻⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨊㬠䥮獴慬氠卥捴楯渊㬪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪⨪ਊ孍慮畦慣瑵牥牝ਥ䵡湵晡捴畲敲乡浥┠㴠却慮摡牤ⱎ呁前㘴⸱〮〮⸮ㄶ㈹㤊਻⁔桥⁐䵉䌠湯摥⁯映瑨攠牵湴業攠䑓䑔 䅃偉屋低䄱〰㌩⁩猠牥畳敤Ⱐ湯⁦楲海慲攊㬠潲⁓卄吠捨慮来⁩猠湥敤敤⸠⁏湬礠潮攠摲楶敲⁭慹⁯睮⁴桡琠桡牤睡牥⁩搬⁴桥਻⁯汤⁐䵉䌮楮映桡猠瑯⁢攠牥浯癥搠扥景牥⁴桩猠灡捫慧攠楳⁩湳瑡汬敤⸊孓瑡湤慲搮乔䅒䴶㐮㄰⸰⸮⸱㘲㤹崊╔䥍䕌䴮䑥癩捥䑥獣┠㴠呩浥汭䉵瑴潮獟䑥癩捥Ⱐ䅃偉屋低䄱〰㌊ਜ਼呩浥汭䉵瑴潮獟䑥癩捥⹎呝੃潰祆楬敳‽⁆楬敟䍯灹ਊ孆楬敟䍯灹崊呩浥汭䉵瑴潮献獹猊਻ⴭⴭⴭⴭⴭⴭⴭ⁓敲癩捥⁩湳瑡汬慴楯渊孔業敬浂畴瑯湳彄敶楣攮乔⹓敲癩捥獝ੁ摤卥牶楣攠㴠呩浥汭䉵瑴潮猬╓偓噃䥎協彁卓佃卅剖䥃䔥Ⱐ呩浥汭䉵瑴潮獟卥牶楣敟䥮獴ਊ㬠ⴭⴭⴭⴭⴭⴭⴭ⁔業敬浂畴瑯湳⁤物癥爠楮獴慬氠獥捴楯湳ਜ਼呩浥汭䉵瑴潮獟卥牶楣敟䥮獴崊䑩獰污祎慭攠†‽‥呉䵅䱍⹓噃䑅千┊卥牶楣敔祰攠†‽‱†††††††※⁓䕒噉䍅彋䕒久䱟䑒䥖䕒੓瑡牴呹灥†††㴠㌠†††††††㬠卅剖䥃䕟䑅䵁乄当呁剔੅牲潲䍯湴牯氠†㴠ㄠ†††††††㬠卅剖䥃䕟䕒剏剟乏前䅌੓敲癩捥䉩湡特†㴠┱㌥屔業敬浂畴瑯湳⹳祳ਊ孓瑲楮杳崊卐卖䍉乓呟䅓协䍓䕒噉䍅‽‰砰〰〰〰㈊偲潶楤敲乡浥‽•坯䄭䭯湡⁡畴桯牳∊䵡湵晡捴畲敲乡浥‽•兵慬捯浭∊䑩獫乡浥‽•兵慬捯浭⁐䵉䌠䑥癩捥⁉湳瑡汬慴楯渠䑩獫∊呉䵅䱍⹄敶楣敄敳挠㴠≔業敬洠噯汵浥⁡湤⁐潷敲⁂畴瑯湳∊呉䵅䱍⹓噃䑅千‽•呩浥汭⁂畴瑯湳⁓敲癩捥∊
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System
+ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider    = %ProviderName%
+CatalogFile = TimelmButtons.cat
+DriverVer   =
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+TimelmButtons.sys  = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NTARM64.10.0...16299
+
+; The PMIC node of the runtime DSDT (ACPI\KONA1003) is reused, no firmware
+; or SSDT change is needed.  Only one driver may own that hardware id, the
+; old PMIC.inf has to be removed before this package is installed.
+[Standard.NTARM64.10.0...16299]
+%TIMELM.DeviceDesc% = TimelmButtons_Device, ACPI\KONA1003
+
+[TimelmButtons_Device.NT]
+CopyFiles = File_Copy
+
+[File_Copy]
+TimelmButtons.sys
+
+;-------------- Service installation
+[TimelmButtons_Device.NT.Services]
+AddService = TimelmButtons,%SPSVCINST_ASSOCSERVICE%, TimelmButtons_Service_Inst
+
+; -------------- TimelmButtons driver install sections
+[TimelmButtons_Service_Inst]
+DisplayName    = %TIMELM.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\TimelmButtons.sys
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ProviderName = "WoA-Kona authors"
+ManufacturerName = "Qualcomm"
+DiskName = "Qualcomm PMIC Device Installation Disk"
+TIMELM.DeviceDesc = "Timelm Volume and Power Buttons"
+TIMELM.SVCDESC = "Timelm Buttons Service"
