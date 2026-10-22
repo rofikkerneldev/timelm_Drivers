@@ -74,7 +74,7 @@ typedef struct _BUTTON_ENTRY {
     ULONG64 PressStartMs;
     ULONG64 LastEdgeMs;
     ULONG64 HeldMs;
-} BUTTON_ENTRY;
+} BUTTON_ENTRY, *PBUTTON_ENTRY;
 
 typedef struct _DEVICE_CONTEXT {
     WDFDEVICE Device;
@@ -82,7 +82,7 @@ typedef struct _DEVICE_CONTEXT {
     WDFIOTARGET IoTarget;
     SPMI_INTERFACE SPMIInterface;
     BOOLEAN SpmiReady;
-    KSPIN_LOCK Lock;
+    WDFSPINLOCK Lock;
     TIMELM_BUTTON_MAPPING Mapping;
     TIMELM_BUTTON_STATE State;
     BUTTON_ENTRY Entries[TIMELM_BUTTON_COUNT];

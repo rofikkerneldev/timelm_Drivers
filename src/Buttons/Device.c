@@ -63,7 +63,7 @@ ButtonsCreateDevice(
     RtlZeroMemory(deviceContext, sizeof(DEVICE_CONTEXT));
 
     deviceContext->Device = device;
-    KeInitializeSpinLock(&deviceContext->Lock);
+    WdfSpinLockInitialize(&deviceContext->Lock);
     KeInitializeEvent(&deviceContext->ChangeEvent, NotificationEvent, FALSE);
 
     ButtonsLoadDefaultMapping(&deviceContext->Mapping);
