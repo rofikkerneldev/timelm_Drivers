@@ -15,16 +15,22 @@ jobs:
       - uses: microsoft/setup-msbuild@v2
         with:
           msbuild-architecture: x64
-      - name: Build GPIO, SPMI and PMIC
+      - name: Build GPIO, SPMI, PMIC and Buttons
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force packages | Out-Null
           $solution = "$pwd\build\"
-          foreach ($part in @('GPIO','SPMI','PMIC')) {
-            & msbuild "src\$part\$part.vcxproj" /m /t:Rebuild /nologo /v:minimal /p:Configuration=Debug /p:Platform=ARM64 "/p:SolutionDir=$solution" /p:KmdfLibraryVersion=1.33 /p:PreferredToolArchitecture=x64 "/flp:logfile=packages\$part-build.log;verbosity=normal"
-            if ($LASTEXITCODE -ne 0) { throw "$part build failed: $LASTEXITCODE" }
-            Copy-Item -Recurse "build\ARM64\Debug\Output\$part" packages
+          $parts = @(
+            @{ dir = 'GPIO';    project = 'GPIO' },
+            @{ dir = 'SPMI';    project = 'SPMI' },
+            @{ dir = 'PMIC';    project = 'PMIC' },
+            @{ dir = 'Buttons'; project = 'TimelmButtons' }
+          )
+          foreach ($part in $parts) {
+            & msbuild "src\$($part.dir)\$($part.project).vcxproj" /m /t:Rebuild /nologo /v:minimal /p:Configuration=Debug /p:Platform=ARM64 "/p:SolutionDir=$solution" /p:KmdfLibraryVersion=1.33 /p:PreferredToolArchitecture=x64 "/flp:logfile=packages\$($part.dir)-build.log;verbosity=normal"
+            if ($LASTEXITCODE -ne 0) { throw "$($part.dir) build failed: $LASTEXITCODE" }
+            Copy-Item -Recurse "build\ARM64\Debug\Output\$($part.project)" "packages\$($part.dir)"
           }
           $manifest = foreach ($file in Get-ChildItem packages -Recurse -File) {
             if ($file.Extension -eq '.sys') {
@@ -38,7 +44,7 @@ jobs:
             @{path=[IO.Path]::GetRelativePath("$pwd\packages",$file.FullName);sha256=(Get-FileHash $file.FullName).Hash;size=$file.Length}
           }
           $manifest | ConvertTo-Json | Set-Content packages\sha256.json
-          @{repository='https://github.com/rofikkerneldev/timelm_Drivers';commit=$env:GITHUB_SHA;components=@('GPIO','SPMI','PMIC');board='LG V60 timelm';configuration='Debug';architecture='ARM64';kmdf='1.33';experimentalTouchPower=$false} | ConvertTo-Json | Set-Content packages\source.json
+          @{repository='https://github.com/rofikkerneldev/timelm_Drivers';commit=$env:GITHUB_SHA;components=@('GPIO','SPMI','PMIC','Buttons');board='LG V60 timelm';configuration='Debug';architecture='ARM64';kmdf='1.33';experimentalTouchPower=$false} | ConvertTo-Json | Set-Content packages\source.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
