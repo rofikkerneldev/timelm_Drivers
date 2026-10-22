@@ -81,8 +81,7 @@ ButtonsCreateDevice(
         status = WdfDeviceCreateSymbolicLink(device, &dosDeviceName);
         if (!NT_SUCCESS(status)) {
             TraceEvents(TRACE_LEVEL_ERROR, TRACE_DEVICE,
-                        "WdfDeviceCreateSymbolicLink(%w) failed %!STATUS!",
-                        TIMELM_BUTTONS_SYMBOLIC_LINK,
+                        "WdfDeviceCreateSymbolicLink failed %!STATUS!",
                         status);
         }
     }
