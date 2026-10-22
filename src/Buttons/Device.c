@@ -246,7 +246,10 @@ ButtonsEvtDeviceD0Entry(
 // goes to sleep.  The virtual HID device has to be deleted here, otherwise
 // the driver unload would leave it behind.
 //
-VOID
+// The callback of the framework returns a status value, also the exit
+// callback.
+//
+NTSTATUS
 ButtonsEvtDeviceD0Exit(
     _In_ WDFDEVICE Device,
     _In_ WDF_POWER_DEVICE_STATE TargetState
@@ -259,6 +262,8 @@ ButtonsEvtDeviceD0Exit(
     deviceContext = DeviceGetContext(Device);
 
     ButtonsHidStop(deviceContext);
+
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS
