@@ -14,6 +14,7 @@ Abstract:
 
 #include <SPMI.h>
 #include <TimelmButtons.h>
+#include <vhf.h>
 
 EXTERN_C_START
 
@@ -90,6 +91,11 @@ typedef struct _DEVICE_CONTEXT {
     KEVENT ChangeEvent;
     ULONG64 StartMs;
     ULONG RetryCounter;
+    VHFHANDLE HidHandle;
+    BOOLEAN HidStarted;
+    BOOLEAN HidStopping;
+    LONG HidBusy;
+    KEVENT HidIdleEvent;
 } DEVICE_CONTEXT, *PDEVICE_CONTEXT;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT, DeviceGetContext)
@@ -121,6 +127,51 @@ ButtonsReadPmic(
 VOID
 ButtonsSample(
     _Inout_ PDEVICE_CONTEXT Context
+    );
+
+//
+// The HID face of the driver.  The device is created with the Virtual HID
+// Framework, so that Windows sees the buttons as a real HID device.  A
+// failure of the HID face never stops the driver, the agent path stays
+// usable.
+//
+NTSTATUS
+ButtonsHidInitialize(
+    _Inout_ PDEVICE_CONTEXT Context
+    );
+
+NTSTATUS
+ButtonsHidStart(
+    _Inout_ PDEVICE_CONTEXT Context
+    );
+
+//
+// Deletes the virtual HID device.  It waits for a running report to finish,
+// so that the handle is not used while it is deleted.  It is called when the
+// device is removed, otherwise the driver unload would leave the virtual
+// device behind.
+//
+VOID
+ButtonsHidStop(
+    _Inout_ PDEVICE_CONTEXT Context
+    );
+
+VOID
+ButtonsHidReport(
+    _Inout_ PDEVICE_CONTEXT Context,
+    _In_ UINT32 HidAction
+    );
+
+//
+// Decides what happens with a button that was released again.  A short press
+// belongs to the HID face or to the agent, a long press always belongs to the
+// agent, because only the agent knows the long actions.
+//
+VOID
+ButtonsHandleRelease(
+    _Inout_ PDEVICE_CONTEXT Context,
+    _In_ UINT32 Index,
+    _In_ UINT32 HeldMillis
     );
 
 EVT_WDF_TIMER ButtonsEvtTimerFired;

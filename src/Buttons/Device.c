@@ -54,6 +54,17 @@ ButtonsCreateDevice(
 
     PAGED_CODE();
 
+    //
+    // The virtual HID device has to be deleted when the device is removed,
+    // otherwise the driver unload would leave it behind.
+    //
+    {
+        WDF_DEVICE_REMOVE_CONFIG removeConfig;
+
+        WDF_DEVICE_REMOVE_CONFIG_INIT(&removeConfig, ButtonsEvtDeviceRemove);
+        WdfDeviceInitSetDeviceRemoveConfig(DeviceInit, &removeConfig);
+    }
+
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&deviceAttributes, DEVICE_CONTEXT);
 
     status = WdfDeviceCreate(&DeviceInit, &deviceAttributes, &device);
@@ -77,6 +88,7 @@ ButtonsCreateDevice(
     }
 
     KeInitializeEvent(&deviceContext->ChangeEvent, NotificationEvent, FALSE);
+    KeInitializeEvent(&deviceContext->HidIdleEvent, NotificationEvent, TRUE);
 
     ButtonsLoadDefaultMapping(&deviceContext->Mapping);
 
@@ -84,6 +96,24 @@ ButtonsCreateDevice(
     deviceContext->State.Ready = 0;
     deviceContext->State.Buttons = 0;
     deviceContext->State.ChangeCounter = 0;
+    deviceContext->State.HidReady = 0;
+    deviceContext->State.HidReportCount = 0;
+
+    //
+    // The HID face is optional.  When it is there, Windows sees the buttons
+    // as a real HID device and reacts to them itself.  A failure of the VHF
+    // device is only a warning, the agent path does not need it and the
+    // driver keeps working.
+    //
+    status = ButtonsHidInitialize(deviceContext);
+    if (NT_SUCCESS(status)) {
+        (void)ButtonsHidStart(deviceContext);
+    } else {
+        TraceEvents(TRACE_LEVEL_WARNING, TRACE_DEVICE,
+                    "the HID face is not available (%!STATUS!), the agent path stays usable",
+                    status);
+    }
+    deviceContext->State.HidReady = deviceContext->HidStarted ? 1 : 0;
 
     //
     // The symbolic link is the user mode entry point: \\.\TimelmButtons
@@ -174,6 +204,23 @@ ButtonsCreateDevice(
                 TIMELM_BUTTONS_POLL_PERIOD_MS);
 
     return STATUS_SUCCESS;
+}
+
+//
+// Called when the device is removed from the system, for example when the
+// driver package is uninstalled.  The virtual HID device has to be deleted
+// here, otherwise the driver unload would leave it behind.
+//
+VOID
+ButtonsEvtDeviceRemove(
+    _In_ WDFDEVICE Device
+    )
+{
+    PDEVICE_CONTEXT deviceContext;
+
+    deviceContext = DeviceGetContext(Device);
+
+    ButtonsHidStop(deviceContext);
 }
 
 NTSTATUS
@@ -294,6 +341,34 @@ ButtonsLoadDefaultMapping(
     Mapping->Source[TIMELM_BUTTON_VOLUME_UP].Mask = 0x01;
     Mapping->Source[TIMELM_BUTTON_VOLUME_UP].Polarity = TIMELM_POLARITY_LOW;
     Mapping->Source[TIMELM_BUTTON_VOLUME_UP].Enabled = 1;
+
+    //
+    // The defaults are the behaviour that was proven on the phone: the
+    // agent answers the short presses with TAB, ENTER and the lock, and the
+    // long presses with the context menu and the clean shutdown.
+    //
+    // The HID face is switched off by default, it is enabled per button
+    // with IOCTL_TIMELM_BUTTONS_SET_MAPPING.  With the HID face the short
+    // press is a native volume or power key and only the long press is
+    // left to the agent.
+    //
+    Mapping->Action[TIMELM_BUTTON_POWER].HidAction = TIMELM_HID_NONE;
+    Mapping->Action[TIMELM_BUTTON_POWER].LongPressMillis = 1500;
+    Mapping->Action[TIMELM_BUTTON_POWER].AgentShortAction = TIMELM_AGENT_LOCK;
+    Mapping->Action[TIMELM_BUTTON_POWER].AgentLongAction = TIMELM_AGENT_SHUTDOWN;
+    Mapping->Action[TIMELM_BUTTON_POWER].HidEnabled = 0;
+
+    Mapping->Action[TIMELM_BUTTON_VOLUME_UP].HidAction = TIMELM_HID_NONE;
+    Mapping->Action[TIMELM_BUTTON_VOLUME_UP].LongPressMillis = 0;
+    Mapping->Action[TIMELM_BUTTON_VOLUME_UP].AgentShortAction = TIMELM_AGENT_TAB;
+    Mapping->Action[TIMELM_BUTTON_VOLUME_UP].AgentLongAction = TIMELM_AGENT_NONE;
+    Mapping->Action[TIMELM_BUTTON_VOLUME_UP].HidEnabled = 0;
+
+    Mapping->Action[TIMELM_BUTTON_VOLUME_DOWN].HidAction = TIMELM_HID_NONE;
+    Mapping->Action[TIMELM_BUTTON_VOLUME_DOWN].LongPressMillis = 800;
+    Mapping->Action[TIMELM_BUTTON_VOLUME_DOWN].AgentShortAction = TIMELM_AGENT_ENTER;
+    Mapping->Action[TIMELM_BUTTON_VOLUME_DOWN].AgentLongAction = TIMELM_AGENT_SHIFT_F10;
+    Mapping->Action[TIMELM_BUTTON_VOLUME_DOWN].HidEnabled = 0;
 }
 
 NTSTATUS
@@ -397,6 +472,8 @@ ButtonsSample(
     TIMELM_BUTTON_MAPPING mapping;
     BOOLEAN pressedNow[TIMELM_BUTTON_COUNT];
     BOOLEAN sampleValid[TIMELM_BUTTON_COUNT];
+    BOOLEAN released[TIMELM_BUTTON_COUNT];
+    UINT32 releasedHeld[TIMELM_BUTTON_COUNT];
     UINT32 cacheSid[TIMELM_BUTTON_COUNT];
     UINT32 cacheAddr[TIMELM_BUTTON_COUNT];
     UINT8 cacheValue[TIMELM_BUTTON_COUNT];
@@ -424,6 +501,8 @@ ButtonsSample(
     RtlZeroMemory(pressedNow, sizeof(pressedNow));
     RtlZeroMemory(sampleValid, sizeof(sampleValid));
     RtlZeroMemory(cacheValid, sizeof(cacheValid));
+    RtlZeroMemory(released, sizeof(released));
+    RtlZeroMemory(releasedHeld, sizeof(releasedHeld));
 
     WdfSpinLockAcquire(Context->Lock);
     mapping = Context->Mapping;
@@ -514,6 +593,8 @@ ButtonsSample(
                 entry->HeldMs = 0;
             } else {
                 entry->HeldMs = now - entry->PressStartMs;
+                released[i] = TRUE;
+                releasedHeld[i] = (UINT32)entry->HeldMs;
             }
 
             changed = TRUE;
@@ -542,4 +623,67 @@ ButtonsSample(
     if (changed) {
         KeSetEvent(&Context->ChangeEvent, IO_NO_INCREMENT, FALSE);
     }
+
+    //
+    // A button that was released again may have to be reported to Windows
+    // as a HID report.  The decision needs the mapping, so it is made
+    // outside of the spin lock.
+    //
+    for (i = 0; i < TIMELM_BUTTON_COUNT; i++) {
+        if (released[i]) {
+            ButtonsHandleRelease(Context, (UINT32)i, releasedHeld[i]);
+        }
+    }
+}
+
+//
+// Decides what happens with a button that was released again.
+//
+// A short press belongs to the HID face, a long press always belongs to the
+// agent, because only the agent knows the long actions.  The HID report is
+// therefore only sent when the button was released before the long press
+// threshold.
+//
+VOID
+ButtonsHandleRelease(
+    _Inout_ PDEVICE_CONTEXT Context,
+    _In_ UINT32 Index,
+    _In_ UINT32 HeldMillis
+    )
+{
+    TIMELM_BUTTON_MAPPING mapping;
+    UINT32 hidAction;
+
+    WdfSpinLockAcquire(Context->Lock);
+    mapping = Context->Mapping;
+    WdfSpinLockRelease(Context->Lock);
+
+    if (Index >= (UINT32)TIMELM_BUTTON_COUNT) {
+        return;
+    }
+
+    if (mapping.Action[Index].HidEnabled == 0) {
+        return;
+    }
+
+    hidAction = mapping.Action[Index].HidAction;
+
+    if (hidAction == TIMELM_HID_NONE) {
+        return;
+    }
+
+    if (mapping.Action[Index].LongPressMillis > 0 &&
+        HeldMillis >= mapping.Action[Index].LongPressMillis) {
+        TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DEVICE,
+                    "button %u was a long press (%u ms), no HID report",
+                    (unsigned int)Index,
+                    (unsigned int)HeldMillis);
+        return;
+    }
+
+    ButtonsHidReport(Context, hidAction);
+
+    WdfSpinLockAcquire(Context->Lock);
+    Context->State.HidReportCount++;
+    WdfSpinLockRelease(Context->Lock);
 }

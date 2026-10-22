@@ -58,14 +58,50 @@
 #define TIMELM_POLARITY_HIGH 0u /* pressed when (value & Mask) != 0 */
 #define TIMELM_POLARITY_LOW  1u /* pressed when (value & Mask) == 0 */
 
-#define TIMELM_BUTTON_STATE_VERSION   1u
-#define TIMELM_BUTTON_MAPPING_VERSION 1u
+#define TIMELM_BUTTON_STATE_VERSION   2u
+#define TIMELM_BUTTON_MAPPING_VERSION 2u
+
+//
+// Size of the first version of the mapping structure.  A tool that still
+// speaks that version is still accepted, the driver fills the actions with
+// the defaults.  The first 80 bytes of the structure did not change, so a
+// caller of the first version reads the same sources as before.
+//
+#define TIMELM_BUTTON_MAPPING_LEGACY_SIZE 80u
+
+//
+// Size of the first version of the state structure.  The first 48 bytes did
+// not change, so a caller of the first version reads the same state as
+// before.
+//
+#define TIMELM_BUTTON_STATE_LEGACY_SIZE 48u
 
 //
 // Maximum number of bytes that can be transferred by one RAW_READ/DUMP.
 // The SPMI arbiter supports at most 8 bytes per transaction.
 //
 #define TIMELM_BUTTONS_MAX_TRANSFER   8u
+
+//
+// What the driver reports to Windows as a HID device.  The HID face is
+// optional, it is switched on per button with HidEnabled.
+//
+#define TIMELM_HID_NONE        0u /* the button is not reported as HID  */
+#define TIMELM_HID_VOLUME_INC  1u /* consumer control, volume increment */
+#define TIMELM_HID_VOLUME_DEC  2u /* consumer control, volume decrement */
+#define TIMELM_HID_POWER_DOWN  3u /* system control, system power down   */
+
+//
+// What the user mode agent does with a button.  The agent and the HID face
+// are two independent consumers of the same press, the mapping decides which
+// of them reacts to a short press and which one reacts to a long press.
+//
+#define TIMELM_AGENT_NONE      0u
+#define TIMELM_AGENT_TAB       1u
+#define TIMELM_AGENT_ENTER     2u
+#define TIMELM_AGENT_SHIFT_F10 3u
+#define TIMELM_AGENT_LOCK      4u
+#define TIMELM_AGENT_SHUTDOWN  5u
 
 //
 // Describes where the state of one button is read from.
@@ -80,12 +116,25 @@ typedef struct _TIMELM_BUTTON_SOURCE {
 } TIMELM_BUTTON_SOURCE, *PTIMELM_BUTTON_SOURCE;
 
 //
+// What happens with one button.
+//
+typedef struct _TIMELM_BUTTON_ACTION {
+    UINT32 HidAction;        /* TIMELM_HID_*                      */
+    UINT32 LongPressMillis;  /* 0 = the button has no long press  */
+    UINT32 AgentShortAction; /* TIMELM_AGENT_*, 0 = ignore        */
+    UINT32 AgentLongAction;  /* TIMELM_AGENT_*, 0 = ignore        */
+    UINT32 HidEnabled;       /* 0 = the HID face ignores it       */
+    UINT32 Reserved;
+} TIMELM_BUTTON_ACTION, *PTIMELM_BUTTON_ACTION;
+
+//
 // Complete mapping of the three buttons.
 //
 typedef struct _TIMELM_BUTTON_MAPPING {
     UINT32 Version;   /* TIMELM_BUTTON_MAPPING_VERSION */
     UINT32 Count;     /* number of valid Source[] entries */
     TIMELM_BUTTON_SOURCE Source[TIMELM_BUTTON_COUNT];
+    TIMELM_BUTTON_ACTION Action[TIMELM_BUTTON_COUNT];
 } TIMELM_BUTTON_MAPPING, *PTIMELM_BUTTON_MAPPING;
 
 //
@@ -99,6 +148,8 @@ typedef struct _TIMELM_BUTTON_STATE {
     UINT32 PressCount[TIMELM_BUTTON_COUNT];
     UINT32 HeldMillis[TIMELM_BUTTON_COUNT]; /* duration of the current (or last) press */
     UINT32 LastEdgeMillis;  /* milliseconds since the driver was loaded */
+    UINT32 HidReady;        /* 1 when the HID device is running (was Reserved in version 1) */
+    UINT32 HidReportCount;  /* number of HID reports that were sent */
     UINT32 Reserved;
 } TIMELM_BUTTON_STATE, *PTIMELM_BUTTON_STATE;
 

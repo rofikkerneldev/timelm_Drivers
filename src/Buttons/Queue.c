@@ -96,14 +96,23 @@ ButtonsEvtIoDeviceControl(
 
     case IOCTL_TIMELM_BUTTONS_GET_STATE: {
         PVOID buffer = NULL;
+        ULONG copyLength;
 
-        if (OutputBufferLength < sizeof(TIMELM_BUTTON_STATE)) {
+        if (OutputBufferLength < TIMELM_BUTTON_STATE_LEGACY_SIZE) {
             status = STATUS_BUFFER_TOO_SMALL;
             break;
         }
 
+        //
+        // A caller of the first version of the structure asks for 48 bytes
+        // and gets the first 48 bytes of the current one, the rest is the
+        // state of the HID face.
+        //
+        copyLength = (OutputBufferLength < sizeof(TIMELM_BUTTON_STATE))
+                   ? (ULONG)OutputBufferLength : (ULONG)sizeof(TIMELM_BUTTON_STATE);
+
         status = WdfRequestRetrieveOutputBuffer(Request,
-                                                sizeof(TIMELM_BUTTON_STATE),
+                                                copyLength,
                                                 &buffer,
                                                 NULL);
         if (!NT_SUCCESS(status)) {
@@ -111,25 +120,29 @@ ButtonsEvtIoDeviceControl(
         }
 
         WdfSpinLockAcquire(deviceContext->Lock);
-        RtlCopyMemory(buffer, &deviceContext->State, sizeof(TIMELM_BUTTON_STATE));
+        RtlCopyMemory(buffer, &deviceContext->State, copyLength);
         WdfSpinLockRelease(deviceContext->Lock);
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
-                                           (ULONG)sizeof(TIMELM_BUTTON_STATE));
+                                           copyLength);
         return;
     }
 
     case IOCTL_TIMELM_BUTTONS_GET_MAPPING: {
         PVOID buffer = NULL;
+        ULONG copyLength;
 
-        if (OutputBufferLength < sizeof(TIMELM_BUTTON_MAPPING)) {
+        if (OutputBufferLength < TIMELM_BUTTON_MAPPING_LEGACY_SIZE) {
             status = STATUS_BUFFER_TOO_SMALL;
             break;
         }
 
+        copyLength = (OutputBufferLength < sizeof(TIMELM_BUTTON_MAPPING))
+                   ? (ULONG)OutputBufferLength : (ULONG)sizeof(TIMELM_BUTTON_MAPPING);
+
         status = WdfRequestRetrieveOutputBuffer(Request,
-                                                sizeof(TIMELM_BUTTON_MAPPING),
+                                                copyLength,
                                                 &buffer,
                                                 NULL);
         if (!NT_SUCCESS(status)) {
@@ -137,42 +150,71 @@ ButtonsEvtIoDeviceControl(
         }
 
         WdfSpinLockAcquire(deviceContext->Lock);
-        RtlCopyMemory(buffer, &deviceContext->Mapping, sizeof(TIMELM_BUTTON_MAPPING));
+        RtlCopyMemory(buffer, &deviceContext->Mapping, copyLength);
         WdfSpinLockRelease(deviceContext->Lock);
 
         WdfRequestCompleteWithInformation(Request,
                                            STATUS_SUCCESS,
-                                           (ULONG)sizeof(TIMELM_BUTTON_MAPPING));
+                                           copyLength);
         return;
     }
 
     case IOCTL_TIMELM_BUTTONS_SET_MAPPING: {
         TIMELM_BUTTON_MAPPING mapping;
         PVOID buffer = NULL;
+        ULONG copyLength;
 
-        if (InputBufferLength < sizeof(TIMELM_BUTTON_MAPPING)) {
+        if (InputBufferLength < TIMELM_BUTTON_MAPPING_LEGACY_SIZE) {
             status = STATUS_BUFFER_TOO_SMALL;
             break;
         }
 
+        copyLength = (InputBufferLength < sizeof(TIMELM_BUTTON_MAPPING))
+                   ? (ULONG)InputBufferLength : (ULONG)sizeof(TIMELM_BUTTON_MAPPING);
+
         status = WdfRequestRetrieveInputBuffer(Request,
-                                               sizeof(TIMELM_BUTTON_MAPPING),
+                                               copyLength,
                                                &buffer,
                                                NULL);
         if (!NT_SUCCESS(status)) {
             break;
         }
 
-        RtlCopyMemory(&mapping, buffer, sizeof(mapping));
+        RtlZeroMemory(&mapping, sizeof(mapping));
+        RtlCopyMemory(&mapping, buffer, copyLength);
 
-        if (mapping.Version != TIMELM_BUTTON_MAPPING_VERSION ||
-            mapping.Count != TIMELM_BUTTON_COUNT) {
-            TraceEvents(TRACE_LEVEL_ERROR, TRACE_QUEUE,
-                        "Invalid mapping version %u count %u",
-                        mapping.Version,
-                        mapping.Count);
-            status = STATUS_INVALID_PARAMETER;
-            break;
+        if (copyLength >= sizeof(TIMELM_BUTTON_MAPPING) &&
+            mapping.Version == TIMELM_BUTTON_MAPPING_VERSION &&
+            mapping.Count == TIMELM_BUTTON_COUNT) {
+            //
+            // The current version, the actions are used as they are.
+            //
+        } else {
+            TIMELM_BUTTON_MAPPING fallback;
+
+            RtlZeroMemory(&fallback, sizeof(fallback));
+            ButtonsLoadDefaultMapping(&fallback);
+
+            if ((mapping.Version != 1u &&
+                 mapping.Version != TIMELM_BUTTON_MAPPING_VERSION) ||
+                mapping.Count != TIMELM_BUTTON_COUNT) {
+                TraceEvents(TRACE_LEVEL_ERROR, TRACE_QUEUE,
+                            "Invalid mapping version %u count %u",
+                            mapping.Version,
+                            mapping.Count);
+                status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            //
+            // A tool that speaks the first version, or a caller that did
+            // not send the actions at all.  The sources are taken over, the
+            // actions come from the default mapping.
+            //
+            RtlCopyMemory(mapping.Action,
+                          fallback.Action,
+                          sizeof(mapping.Action));
+            mapping.Version = TIMELM_BUTTON_MAPPING_VERSION;
         }
 
         WdfSpinLockAcquire(deviceContext->Lock);
@@ -299,27 +341,34 @@ ButtonsEvtIoDeviceControl(
             }
         }
 
-        if (OutputBufferLength < sizeof(TIMELM_BUTTON_STATE)) {
+        if (OutputBufferLength < TIMELM_BUTTON_STATE_LEGACY_SIZE) {
             status = STATUS_BUFFER_TOO_SMALL;
             break;
         }
 
-        status = WdfRequestRetrieveOutputBuffer(Request,
-                                                sizeof(TIMELM_BUTTON_STATE),
-                                                &buffer,
-                                                NULL);
-        if (!NT_SUCCESS(status)) {
-            break;
+        {
+            ULONG copyLength;
+
+            copyLength = (OutputBufferLength < sizeof(TIMELM_BUTTON_STATE))
+                       ? (ULONG)OutputBufferLength : (ULONG)sizeof(TIMELM_BUTTON_STATE);
+
+            status = WdfRequestRetrieveOutputBuffer(Request,
+                                                    copyLength,
+                                                    &buffer,
+                                                    NULL);
+            if (!NT_SUCCESS(status)) {
+                break;
+            }
+
+            WdfSpinLockAcquire(deviceContext->Lock);
+            RtlCopyMemory(buffer, &deviceContext->State, copyLength);
+            WdfSpinLockRelease(deviceContext->Lock);
+
+            WdfRequestCompleteWithInformation(Request,
+                                               STATUS_SUCCESS,
+                                               copyLength);
+            return;
         }
-
-        WdfSpinLockAcquire(deviceContext->Lock);
-        RtlCopyMemory(buffer, &deviceContext->State, sizeof(TIMELM_BUTTON_STATE));
-        WdfSpinLockRelease(deviceContext->Lock);
-
-        WdfRequestCompleteWithInformation(Request,
-                                           STATUS_SUCCESS,
-                                           (ULONG)sizeof(TIMELM_BUTTON_STATE));
-        return;
     }
 
     default:

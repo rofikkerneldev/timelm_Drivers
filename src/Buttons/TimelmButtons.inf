@@ -35,6 +35,16 @@ CopyFiles = File_Copy
 [File_Copy]
 TimelmButtons.sys
 
+;-------------- Lower filter of the virtual HID device
+; The HID face of the driver creates a virtual HID device with the Virtual
+; HID Framework.  The vhf filter has to be part of the stack of this
+; device, otherwise VhfCreate fails.
+[TimelmButtons_Device.NT.HW]
+AddReg = TimelmButtons_LowerFilters
+
+[TimelmButtons_LowerFilters]
+HKR,,"LowerFilters",0x00010008,"vhf"
+
 ;-------------- Service installation
 [TimelmButtons_Device.NT.Services]
 AddService = TimelmButtons,%SPSVCINST_ASSOCSERVICE%, TimelmButtons_Service_Inst
